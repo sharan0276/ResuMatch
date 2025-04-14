@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Resume Analyzer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://kit.fontawesome.com/a076d05399.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><i class="fas fa-file-alt"></i> Resume Analyzer</h1>
+      <p class="subtitle">Upload your resume and get instant job recommendations</p>
+
+      <!-- 🌗 Theme Toggle -->
+      <div class="toggle-theme">
+        <label class="theme-switch">
+          <input type="checkbox" id="theme-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </header>
+
+    {% if error %}
+    <div class="error">
+      <i class="fas fa-exclamation-circle"></i> {{ error }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <form method="POST" enctype="multipart/form-data">
+        <div class="form-group file-upload">
+          <label for="resume">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Upload Your Resume</span>
+            <small>PDF format only</small>
+          </label>
+          <input type="file" id="resume" name="resume" accept=".pdf" required>
+          <div id="file-name" class="file-name"></div>
+        </div>
+
+        <div class="form-group">
+          <label for="job_description">
+            <i class="fas fa-briefcase"></i> Job Description
+          </label>
+          <textarea id="job_description" name="job_description" rows="6" placeholder="Paste the job description here to calculate match percentage..."></textarea>
+        </div>
+
+        <button type="submit"><i class="fas fa-search"></i> Analyze Resume</button>
+      </form>
+    </div>
+
+    {% if match_percentage is not none or job_recommendations %}
+    <div class="results-container">
+
+      {% if match_percentage is not none %}
+      <div class="result-card match-score">
+        <h2>Match Score</h2>
+        <div class="score-circle" data-score="{{ match_percentage }}">
+          <span class="percentage">{{ match_percentage }}%</span>
+        </div>
+        <p>Match with Job Description</p>
+      </div>
+      {% endif %}
+
+      {% if job_recommendations %}
+      <div class="tabs">
+        <button class="tab-button active" data-filter="all">All</button>
+        <button class="tab-button" data-filter="ml">AI & ML</button>
+        <button class="tab-button" data-filter="dev">Development</button>
+        <button class="tab-button" data-filter="data">Data & Analytics</button>
+      </div>
+
+      <div id="no-recommendation-message" style="display:none; text-align:center; margin:20px;">
+        <div style="font-size: 1.2em; color: #c62828; animation: fadeIn 0.8s ease-in-out;">
+          <i class="fas fa-exclamation-circle"></i> No recommendations under this category.
+        </div>
+      </div>
+
+      {% if job_recommendations | selectattr('match_percentage', '>=', 90) | list %}
+      <div class="section-block" data-section="high">
+        <h2><i class="fas fa-star"></i> Highly Recommended</h2>
+        <div class="recommendations-list">
+          {% for job in job_recommendations if job.match_percentage >= 90 %}
+          <div class="recommendation-item tilt-card" data-tilt data-category="{% if 'ml' in job.job_title|lower %}ml{% elif 'developer' in job.job_title|lower or 'engineer' in job.job_title|lower %}dev{% elif 'data' in job.job_title|lower %}data{% else %}other{% endif %}">
+            <div class="job-title">
+              <i class="fas fa-briefcase"></i> {{ job.job_title }}
+            </div>
+            <div class="match-bar">
+              <div class="bar" style="width: {{ job.match_percentage }}%"></div>
+              <span class="percentage">{{ job.match_percentage }}%</span>
+            </div>
+            <div class="badges">
+              <strong>✅ Matched Skills:</strong>
+              {% for kw in job.matched_keywords %}
+              <span class="badge matched">{{ kw }}</span>
+              {% endfor %}
+              <br><strong>❌ Missing Skills:</strong>
+              {% if job.missing_keywords %}
+              {% for kw in job.missing_keywords %}
+              <span class="badge missing">{{ kw }}</span>
+              {% endfor %}
+              {% else %}
+              <span class="badge matched">You're doing great — nothing critical missing!</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if job_recommendations | selectattr('match_percentage', '<', 90) | list %}
+      <div class="section-block" data-section="low">
+        <h2><i class="fas fa-lightbulb"></i> Also Recommended</h2>
+        <div class="recommendations-list">
+          {% for job in job_recommendations if job.match_percentage < 90 %}
+          <div class="recommendation-item tilt-card" data-tilt data-category="{% if 'ml' in job.job_title|lower %}ml{% elif 'developer' in job.job_title|lower or 'engineer' in job.job_title|lower %}dev{% elif 'data' in job.job_title|lower %}data{% else %}other{% endif %}">
+            <div class="job-title">
+              <i class="fas fa-briefcase"></i> {{ job.job_title }}
+            </div>
+            <div class="match-bar">
+              <div class="bar" style="width: {{ job.match_percentage }}%"></div>
+              <span class="percentage">{{ job.match_percentage }}%</span>
+            </div>
+            <div class="badges">
+              <strong>✅ Matched Skills:</strong>
+              {% for kw in job.matched_keywords %}
+              <span class="badge matched">{{ kw }}</span>
+              {% endfor %}
+              <br><strong>❌ Missing Skills:</strong>
+              {% if job.missing_keywords and job.missing_keywords | length > 0 %}
+    {% for kw in job.missing_keywords %}
+        <span class="badge missing">{{ kw }}</span>
+    {% endfor %}
+{% elif job.match_percentage == 100 %}
+    <span class="badge matched">You're doing great — nothing critical missing!</span>
+{% else %}
+    <span class="badge missing">Missing skills not found in dataset — review resume manually.</span>
+{% endif %}
+
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.7.0/vanilla-tilt.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js"></script>
+  <script>
+    VanillaTilt.init(document.querySelectorAll(".tilt-card"), {
+      max: 10,
+      speed: 400,
+      glare: true,
+      "max-glare": 0.2
+    });
+
+    gsap.to(".badge", {
+      y: "random(-5, 5)",
+      x: "random(-5, 5)",
+      duration: 2,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+      stagger: 0.15
+    });
+
+    document.querySelectorAll(".tab-button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        const filter = btn.getAttribute("data-filter");
+        let anyVisible = false;
+
+        document.querySelectorAll(".recommendation-item").forEach(card => {
+          const category = card.getAttribute("data-category");
+          const show = filter === "all" || category === filter;
+          card.style.display = show ? "block" : "none";
+          if (show) anyVisible = true;
+        });
+
+        document.getElementById("no-recommendation-message").style.display = anyVisible ? "none" : "block";
+
+        document.querySelectorAll(".section-block").forEach(section => {
+          const cards = section.querySelectorAll(".recommendation-item");
+          const visible = Array.from(cards).some(c => c.style.display !== "none");
+          section.style.display = visible ? "block" : "none";
+        });
+      });
+    });
+
+    document.getElementById('resume').addEventListener('change', function(e) {
+      const fileName = e.target.files[0]?.name || 'No file selected';
+      document.getElementById('file-name').textContent = fileName;
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const circles = document.querySelectorAll('.score-circle');
+      circles.forEach(circle => {
+        const score = circle.getAttribute('data-score');
+        circle.style.background = `conic-gradient(
+          #4B874D ${score * 3.6}deg,
+          #f0f0f0 ${score * 3.6}deg
+        )`;
+      });
+
+      // Apply saved theme
+      const toggle = document.getElementById("theme-toggle");
+      if (localStorage.getItem("theme") === "dark") {
+        document.body.classList.add("dark-mode");
+        toggle.checked = true;
+      }
+      toggle.addEventListener("change", () => {
+        document.body.classList.toggle("dark-mode");
+        localStorage.setItem("theme", document.body.classList.contains("dark-mode") ? "dark" : "light");
+      });
+    });
+  </script>
+
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</body>
+</html>
