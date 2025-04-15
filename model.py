@@ -56,61 +56,65 @@ class ResumeJobPredictor:
     def __init__(self):
         self.vectorizer = TfidfVectorizer(max_features=8000, stop_words='english', ngram_range=(1, 2), sublinear_tf=True)
         base_lr = LogisticRegression(max_iter=1000, C=10, class_weight='balanced')
-        self.classifier = OneVsRestClassifier(CalibratedClassifierCV(base_lr, cv=3))
+        self.classifier = OneVsRestClassifier(CalibratedClassifierCV(base_lr, cv=2))
         self.mlb = MultiLabelBinarizer()
 
     def preprocess_text(self, text):
         if isinstance(text, list):
-            text = ' '.join(text)
-        if not isinstance(text, str):
-            return ''
+            text = ' '.join([str(t) for t in text if t])
+        elif not isinstance(text, str):
+            text = str(text) if text is not None else ''
         return re.sub(r'[^\w\s]', '', text.lower().strip())
-
-    def combine_resume_fields(self, row):
-        fields = [
-            row.get('skills', []),
-            row.get('major_field_of_studies', []),
-            row.get('related_skils_in_job', []),
-            row.get('responsibilities', ''),
-            row.get('company_expectations', ''),
-            row.get('skills_required', ''),
-            row.get('career_objective', '')
-        ]
-        return ' '.join([self.preprocess_text(field) for field in fields if field])
 
     def normalize_title(self, title):
         title = title.lower().strip()
         title = re.sub(r'(senior|junior|lead|entry level)', '', title)
         return title.strip()
 
-    def get_job_titles(self, row):
-        titles = set()
+    def train(self, df):
+        print("📚 Preparing data for training...")
 
-        def parse_list_field(field):
-            if pd.isna(field):
+        def preprocess(text):
+            if isinstance(text, list):
+                text = ' '.join([str(t) for t in text if t])
+            elif not isinstance(text, str):
+                text = str(text) if text is not None else ''
+            return re.sub(r'[^\w\s]', '', text.lower().strip())
+
+        df['resume_text'] = df.apply(lambda row: ' '.join([
+            preprocess(row.get('combined_skills', [])),
+            preprocess(row.get('combined_responsibilities', [])),
+            preprocess(row.get('educational_requirements', '')),
+            preprocess(row.get('latest_degree', '')),
+            preprocess(row.get('experience_years', ''))
+        ]), axis=1)
+
+        def extract_job_titles(row):
+            titles = set()
+
+            def parse(field):
+                if isinstance(field, list):
+                    return field
+                if isinstance(field, str):
+                    try:
+                        parsed = ast.literal_eval(field)
+                        return parsed if isinstance(parsed, list) else [parsed]
+                    except:
+                        return [field]
                 return []
-            if isinstance(field, list):
-                return field
-            try:
-                parsed = ast.literal_eval(field)
-                if isinstance(parsed, list):
-                    return parsed
-            except:
-                pass
-            return [field]
 
-        job_fields = parse_list_field(row.get('job_position_name')) + parse_list_field(row.get('positions'))
-        for title in job_fields:
-            titles.add(self.normalize_title(title))
+            job_fields = parse(row.get('job_position_name')) + parse(row.get('positions'))
+            for title in job_fields:
+                norm = self.normalize_title(title)
+                if norm:
+                    titles.add(norm)
+            return list(titles)
 
-        return list(titles)
+        df['job_titles'] = df.apply(extract_job_titles, axis=1)
 
-    def train(self, resume_data_path):
-        df = pd.read_csv(resume_data_path)
-        df['resume_text'] = df.apply(self.combine_resume_fields, axis=1)
-        job_title_lists = df.apply(self.get_job_titles, axis=1)
-        job_titles_flat = [[str(t).strip() for t in titles] for titles in job_title_lists]
-        df['job_titles'] = job_titles_flat
+        flat_titles = pd.Series([title for titles in df['job_titles'] for title in titles])
+        title_counts = flat_titles.value_counts()
+        df = df[df['job_titles'].apply(lambda titles: all(title_counts.get(t, 0) >= 3 for t in titles))]
 
         X = self.vectorizer.fit_transform(df['resume_text'])
         y = self.mlb.fit_transform(df['job_titles'])
@@ -118,7 +122,8 @@ class ResumeJobPredictor:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         self.classifier.fit(X_train, y_train)
 
-        print(f"Validation Accuracy: {self.classifier.score(X_test, y_test):.2f}")
+        accuracy = self.classifier.score(X_test, y_test)
+        print(f"✅ Model training complete. Validation Accuracy: {accuracy:.2f}")
 
     def get_missing_and_matched_keywords(self, resume_text, job_title):
         job_title = job_title.lower().strip()
@@ -135,7 +140,17 @@ class ResumeJobPredictor:
 
         try:
             calibrated_model = self.classifier.estimators_[matched_index]
-            coef = calibrated_model.base_estimator.coef_.flatten() if hasattr(calibrated_model, 'base_estimator') else calibrated_model.coef_.flatten()
+            base_est = getattr(calibrated_model, 'base_estimator', None)
+            coef = None
+
+            if base_est and hasattr(base_est, 'coef_'):
+                coef = np.array(base_est.coef_).flatten()
+            elif hasattr(calibrated_model, 'coef_'):
+                coef = np.array(calibrated_model.coef_).flatten()
+
+            if coef is None:
+                return [], []
+
             feature_array = np.array(self.vectorizer.get_feature_names_out())
             top_features = feature_array[np.argsort(coef)[-50:]]
             missing = [word for word in top_features if word not in resume_tokens][:5]
@@ -160,10 +175,8 @@ class ResumeJobPredictor:
             raw_label = str(self.mlb.classes_[idx]).strip("[]'")
             job_title = raw_label.title()
 
-            # Get keyword comparison
             missing_keywords, matched_keywords = self.get_missing_and_matched_keywords(resume_text, raw_label.lower())
 
-            # Fallback to dummy if empty
             job_key = raw_label.lower().strip()
             if job_key in dummy_skills:
                 if not matched_keywords:
