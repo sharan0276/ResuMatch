@@ -11,21 +11,23 @@ def clean_and_prepare_data(filepath):
         if col in df.columns:
             df[col] = df[col].apply(lambda x: ast.literal_eval(x) if pd.notna(x) else [])
 
-    # Deduplicate
+    # Remove duplicate entries in skills and responsibilities
     df['combined_skills'] = df['combined_skills'].apply(lambda x: list(set(x)) if isinstance(x, list) else [])
     df['combined_responsibilities'] = df['combined_responsibilities'].apply(lambda x: list(set(x)) if isinstance(x, list) else [])
 
     return df
 
 def train_pipeline():
+    # Load and preprocess the dataset
     df = clean_and_prepare_data("updated_resume_data_2.csv")
     print(f"✅ Loaded and cleaned {len(df)} samples.")
-
+    # Initialize, train, and save the job prediction model
     predictor = ResumeJobPredictor()
     predictor.train(df)
     predictor.save_model()
     print("✅ Model trained and saved successfully.")
 
+    # Sample prediction using a hardcoded resume
     sample_resume = """
     Experienced Python developer with expertise in Flask, Django, and machine learning.
     Skills: Python, SQL, Machine Learning, Git

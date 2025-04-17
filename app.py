@@ -8,7 +8,7 @@ from model import ResumeJobPredictor
 
 app = Flask(__name__)
 
-# Initialize and load the model
+# Initialize and load the trained model
 try:
     predictor = ResumeJobPredictor()
     predictor.load_model()
@@ -17,11 +17,13 @@ except Exception as e:
     print("❌ Error loading model:", e)
     predictor = None
 
+# Preprocess text: lowercase and remove punctuation
 def preprocess_text(text):
     text = text.lower()
     text = re.sub(r'[^\w\s]', '', text)
     return text
 
+# Read and extract text from uploaded PDF resume
 def read_pdf(file):
     pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
     text = ""
@@ -29,6 +31,7 @@ def read_pdf(file):
         text += page.extract_text()
     return text
 
+# Calculate cosine similarity between resume and job description
 def calculate_similarity(resume_text, job_description):
     resume_text = preprocess_text(resume_text)
     job_description = preprocess_text(job_description)
@@ -47,15 +50,18 @@ def index():
         try:
             resume_file = request.files['resume']
 
+            # Validate file type
             if not resume_file.filename.endswith('.pdf'):
                 raise ValueError("Please upload a PDF file")
 
             resume_text = read_pdf(resume_file)
             job_description = request.form.get('job_description', '').strip()
 
+             # If job description is provided, compute similarity
             if job_description:
                 match_percentage = calculate_similarity(resume_text, job_description)
 
+            # Predict job roles from resume content
             if predictor:
                 job_recommendations = predictor.predict(resume_text)
                 print("🔍 First recommendation:", job_recommendations[0])
@@ -65,6 +71,7 @@ def index():
         except Exception as e:
             error = str(e)
 
+    # Render the output to the frontend template
     return render_template('index.html',
                            match_percentage=match_percentage,
                            job_recommendations=job_recommendations,

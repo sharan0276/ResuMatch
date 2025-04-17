@@ -54,12 +54,14 @@ dummy_skills = {
 
 class ResumeJobPredictor:
     def __init__(self):
+        # Initialize TF-IDF Vectorizer and One-vs-Rest classifier with calibrated logistic regression
         self.vectorizer = TfidfVectorizer(max_features=8000, stop_words='english', ngram_range=(1, 2), sublinear_tf=True)
         base_lr = LogisticRegression(max_iter=1000, C=10, class_weight='balanced')
         self.classifier = OneVsRestClassifier(CalibratedClassifierCV(base_lr, cv=2))
         self.mlb = MultiLabelBinarizer()
 
     def preprocess_text(self, text):
+        # Basic text preprocessing: lowercase, strip, remove punctuation
         if isinstance(text, list):
             text = ' '.join([str(t) for t in text if t])
         elif not isinstance(text, str):
@@ -67,6 +69,7 @@ class ResumeJobPredictor:
         return re.sub(r'[^\w\s]', '', text.lower().strip())
 
     def normalize_title(self, title):
+        # Simplify job titles by removing prefixes
         title = title.lower().strip()
         title = re.sub(r'(senior|junior|lead|entry level)', '', title)
         return title.strip()
@@ -80,7 +83,7 @@ class ResumeJobPredictor:
             elif not isinstance(text, str):
                 text = str(text) if text is not None else ''
             return re.sub(r'[^\w\s]', '', text.lower().strip())
-
+        # Create a unified text field from multiple resume attributes
         df['resume_text'] = df.apply(lambda row: ' '.join([
             preprocess(row.get('combined_skills', [])),
             preprocess(row.get('combined_responsibilities', [])),
@@ -88,7 +91,7 @@ class ResumeJobPredictor:
             preprocess(row.get('latest_degree', '')),
             preprocess(row.get('experience_years', ''))
         ]), axis=1)
-
+        # Extract and normalize job titles from multiple fields
         def extract_job_titles(row):
             titles = set()
 
@@ -109,7 +112,7 @@ class ResumeJobPredictor:
                 if norm:
                     titles.add(norm)
             return list(titles)
-
+         # Filter out job titles that don't appear frequently enough (for model stability)
         df['job_titles'] = df.apply(extract_job_titles, axis=1)
 
         flat_titles = pd.Series([title for titles in df['job_titles'] for title in titles])
@@ -126,6 +129,7 @@ class ResumeJobPredictor:
         print(f"✅ Model training complete. Validation Accuracy: {accuracy:.2f}")
 
     def get_missing_and_matched_keywords(self, resume_text, job_title):
+         # Identify top weighted features (skills) and compare with resume tokens
         job_title = job_title.lower().strip()
         resume_tokens = set(self.preprocess_text(resume_text).split())
 
@@ -161,6 +165,7 @@ class ResumeJobPredictor:
             return [], []
 
     def predict(self, resume_text):
+        # Predict top job matches and enrich with matched/missing skill keywords
         processed_text = self.preprocess_text(resume_text)
         X = self.vectorizer.transform([processed_text])
         pred_probs = self.classifier.predict_proba(X)
@@ -204,6 +209,7 @@ class ResumeJobPredictor:
         }]
 
     def save_model(self):
+        # Save trained model components for reuse
         os.makedirs('models', exist_ok=True)
         with open('models/vectorizer.pkl', 'wb') as f:
             pickle.dump(self.vectorizer, f)
@@ -213,6 +219,7 @@ class ResumeJobPredictor:
             pickle.dump(self.mlb, f)
 
     def load_model(self):
+        # Load saved model components
         with open('models/vectorizer.pkl', 'rb') as f:
             self.vectorizer = pickle.load(f)
         with open('models/classifier.pkl', 'rb') as f:
