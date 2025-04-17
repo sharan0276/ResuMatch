@@ -18,7 +18,7 @@ Expected Outcome: A fully functional extension providing resume-job match scores
 
 How to run the project:
 
-source venv/bin/activate
-pip install -r requirements.txt
-python train_model.py
-python app.py
+1. source venv/bin/activate
+2. pip install -r requirements.txt
+3. python train_model.py
+4. python app.py
