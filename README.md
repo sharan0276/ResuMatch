@@ -21,3 +21,5 @@ How to run the project:
 2. pip install -r requirements.txt
 3. python train_model.py
 4. python app.py
+
+Presentation recording link: https://drive.google.com/file/d/1lNvvPIv_qwgc2sLHEvQ3XQmuQmPU6pkB/view?usp=drive_link
