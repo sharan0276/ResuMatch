@@ -4,9 +4,8 @@
 This project aims to develop a browser extension that automatically analyzes a user's resume when they open a job application form. Unlike conventional resume parsers, our system goes beyond keyword matching by identifying related tools and technologies that align with job requirements. Additionally, it suggests job roles based on the candidate’s skills and experience, helping users discover suitable opportunities.
 
 2. Dataset:
-Resume Datasets: 
+Resume Dataset: 
 https://www.kaggle.com/datasets/saugataroyarghya/resume-dataset
-https://www.kaggle.com/datasets/jithinjagadeesh/resume-dataset
 Job Descriptions: Collected from job boards like LinkedIn, Glassdoor, and Indeed using web scraping techniques.
 
 3. Methodology and Expected Results:
